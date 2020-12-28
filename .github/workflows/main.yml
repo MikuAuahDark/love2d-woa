@@ -1,0 +1,90 @@
+name: woa-build
+on:
+  push:
+  schedule:
+  - cron: '0 12 * * 0'
+
+jobs:
+  arm64:
+    runs-on: windows-latest
+    env:
+      DEPOT_TOOLS_WIN_TOOLCHAIN: 0
+    steps:
+    - name: Download Depot Tools
+      shell: cmd
+      run: curl -o depot_tools.zip https://storage.googleapis.com/chrome-infra/depot_tools.zip
+    - name: Extract Depot Tools
+      shell: cmd
+      run: |
+        mkdir depot_tools
+        cd depot_tools
+        7z x ..\depot_tools.zip
+    - name: Initialize Depot Tools
+      shell: cmd
+      run: |
+        cd depot_tools
+        gclient
+        exit /b 0
+    - name: Prepend Depot Tools to PATH
+      shell: powershell
+      run: |
+        cd depot_tools
+        echo $PWD.ToString() | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+    - name: Clone ANGLE
+      shell: cmd
+      run: git clone --depth 1 https://chromium.googlesource.com/angle/angle
+    - name: Bootstrap ANGLE
+      shell: cmd
+      run: cd angle && python scripts/bootstrap.py && gclient sync && git checkout master
+    - name: Configure ANGLE
+      shell: cmd
+      run: cd angle && gn gen out/Hello --args="target_cpu = \"arm64\" is_debug = false"
+    - name: Build ANGLE
+      shell: cmd
+      run: cd angle && autoninja -C out/Hello libEGL libGLESv2
+    - name: Checkout Megasource
+      uses: actions/checkout@v2
+      with:
+        path: megasource
+        repository: love2d/megasource
+        ref: '12.x'
+    - name: Checkout LÖVE
+      uses: actions/checkout@v2
+      with:
+        path: megasource/libs/love
+        repository: love2d/love
+        ref: '12.0-development'
+    - name: Configure LÖVE
+      shell: cmd
+      run: cmake -Bbuild -Hmegasource -A ARM64 -DCMAKE_INSTALL_PREFIX=%CD%\install
+    - name: Build LOVE
+      shell: cmd
+      run: cmake --build build --config Release --target install
+    - name: Configure VS cmd
+      uses: ilammy/msvc-dev-cmd@v1
+    - name: Download LuaBitOp
+      shell: cmd
+      run: curl -o LuaBitOp-1.0.2.tar.gz https://bitop.luajit.org/download/LuaBitOp-1.0.2.tar.gz
+    - name: Extract LuaBitOp
+      shell: cmd
+      run: tar xzf LuaBitOp-1.0.2.tar.gz
+    - name: Compile LuaBitOp
+      shell: cmd
+      run: cl /nologo /MD /O2 /W3 /c /I megasource/libs/lua-5.1.5/src LuaBitOp-1.0.2/bit.c
+    - name: Linu LuaBitOp
+      shell: cmd
+      run: link /nologo /DLL /export:luaopen_bit /out:bit.dll bit.obj build/lua51/Release/lua51.lib
+    - name: Artifact Preparation
+      shell: cmd
+      run: |
+        copy angle\out\Hello\libEGL.dll install\libEGL.dll
+        if not ERRORLEVEL 0 exit /b 1
+        copy angle\out\Hello\libGLESv2.dll install\libGLESv2.dll
+        if not ERRORLEVEL 0 exit /b 1
+        copy bit.dll install\bit.dll
+        if not ERRORLEVEL 0 exit /b 1
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: love-12.0-win64-arm
+        path: install
