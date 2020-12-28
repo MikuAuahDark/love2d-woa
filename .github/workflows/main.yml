@@ -62,6 +62,8 @@ jobs:
       run: cmake --build build --config Release --target install
     - name: Configure VS cmd
       uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: amd64_arm64
     - name: Download LuaBitOp
       shell: cmd
       run: curl -o LuaBitOp-1.0.2.tar.gz https://bitop.luajit.org/download/LuaBitOp-1.0.2.tar.gz
@@ -71,7 +73,7 @@ jobs:
     - name: Compile LuaBitOp
       shell: cmd
       run: cl /nologo /MD /O2 /W3 /c /I megasource/libs/lua-5.1.5/src LuaBitOp-1.0.2/bit.c
-    - name: Linu LuaBitOp
+    - name: Link LuaBitOp
       shell: cmd
       run: link /nologo /DLL /export:luaopen_bit /out:bit.dll bit.obj build/lua51/Release/lua51.lib
     - name: Artifact Preparation
